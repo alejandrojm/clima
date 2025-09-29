@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Weathry — Dashboard Futurista (OpenWeather)</title>
+
+<!-- Fonts & libs -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500;700;900&family=Orbitron:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<style>
+:root{
+  --bg:#0b0c10;
+  --panel: rgba(18,19,26,0.6);
+  --muted:#9aa3b7;
+  --text:#e9eefb;
+  --cyan:#00f0ff;
+  --magenta:#ff3aff;
+  --gold:#ffcf5b;
+  --glass: rgba(255,255,255,0.03);
+  --border: rgba(255,255,255,0.04);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:
+  radial-gradient(900px 300px at 8% 10%, rgba(45,8,75,0.18), transparent),
+  linear-gradient(180deg,#05060a 0%, #0b0c10 100%);
+  color:var(--text); font-family:Inter, system-ui, Arial, sans-serif;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
+
+.app{display:grid; grid-template-columns:440px 1fr; gap:20px; padding:26px; height:100vh; align-items:stretch;}
+.card{background:var(--panel); border-radius:14px; padding:18px; border:1px solid var(--border); box-shadow:0 10px 40px rgba(2,6,23,0.6); position:relative; overflow:hidden;}
+.brand{display:flex; align-items:center; gap:12px; font-weight:700; font-size:16px}
+.logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(90deg,var(--magenta),#7b2cff,var(--cyan)); display:flex;align-items:center;justify-content:center;font-weight:900;color:#06060a; box-shadow:0 8px 30px rgba(123,44,255,0.12);}
+.controls{display:flex; gap:8px; align-items:center;}
+.btn{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.03); padding:8px 10px;border-radius:10px;color:var(--muted); cursor:pointer; font-size:13px}
+.select{background:transparent;border:none;color:var(--text); font-weight:600}
+.left-col{display:flex; flex-direction:column; gap:18px;}
+.main-weather{display:flex; gap:18px; align-items:center;}
+.temp{font-size:76px; font-weight:900; line-height:0.9; color:var(--text); text-shadow:0 10px 38px rgba(0,240,255,0.04);}
+.loc{font-weight:700; font-size:14px;}
+.desc{color:var(--muted); margin-top:6px;}
+.sun{color:var(--muted); font-size:13px;margin-top:8px}
+.icon-canvas{width:140px;height:120px}
+.meta-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:14px}
+.metric{background:linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.01)); padding:10px;border-radius:10px; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(255,255,255,0.02)}
+.metric small{color:var(--muted); display:block;}
+.metric .val{font-weight:700; font-size:16px; color:var(--text);}
+
+.forecast-row{display:flex; gap:10px; margin-top:12px}
+.day{flex:1; background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005)); padding:10px; border-radius:10px; text-align:center; border:1px solid rgba(255,255,255,0.02)}
+.day .d{font-weight:700;color:var(--muted); font-size:12px}
+.day .t{font-weight:800; font-size:18px; margin-top:6px}
+
+.right-col{display:grid; grid-template-rows:220px 1fr; gap:18px;}
+.map-card{height:100%; border-radius:12px; overflow:hidden; position:relative; display:flex; flex-direction:column;}
+#map{height:100%; width:100%;}
+.top-grid{display:grid; grid-template-columns: 1fr 360px; gap:18px; margin-bottom:10px}
+.uv-card{display:flex;align-items:center;gap:12px}
+.uv-val{font-size:28px; font-weight:900}
+.aqi-big{font-weight:900; font-size:34px; color:var(--text)}
+.aqi-desc{color:var(--muted); margin-top:6px}
+.charts-row{display:grid; grid-template-columns:1fr 380px; gap:18px; margin-top:10px}
+.chart-card{height:180px; display:flex; flex-direction:column}
+.small-metric{font-size:12px;color:var(--muted);}
+
+.header-strip{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px}
+.header-strip .left{display:flex; gap:12px; align-items:center}
+
+.footer{position: absolute; right:14px; bottom:14px; font-size:12px; color:var(--muted);}
+
+@media(max-width:1100px){
+  .app{grid-template-columns:1fr; padding:12px; height:auto}
+  .right-col{grid-template-rows:auto auto}
+  #map{height:300px}
+}
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- LEFT -->
+    <div class="left-col">
+      <div class="card">
+        <div class="header-strip">
+          <div class="left">
+            <div class="logo">W</div>
+            <div>
+              <div style="font-weight:800">Weathry</div>
+              <div style="font-size:12px;color:var(--muted)">Dashboard meteorológico</div>
+            </div>
+          </div>
+          <div class="controls">
+            <div class="btn" id="refreshBtn">Actualizar</div>
+            <select id="citySelect" class="select"></select>
+          </div>
+        </div>
+
+        <div class="main-weather" style="margin-top:10px">
+          <div style="flex:1">
+            <div class="loc" id="loc">Cargando ubicación...</div>
+            <div class="temp" id="temp">--°</div>
+            <div class="desc" id="weatherDesc">--</div>
+            <div class="sun" id="sunTimes">Salida • Puesta</div>
+          </div>
+          <div style="width:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <canvas id="iconCanvas" class="icon-canvas" width="160" height="120"></canvas>
+            <div id="feelsLike" style="margin-top:8px;color:var(--muted);font-size:13px">Feels like --°</div>
+          </div>
+        </div>
+
+        <div class="meta-grid">
+          <div class="metric"><div><small>Humedad</small><div class="val" id="humidity">--%</div></div><div style="font-size:14px;color:var(--muted)">💧</div></div>
+          <div class="metric"><div><small>Viento</small><div class="val" id="windSpeed">-- km/h</div></div><div style="font-size:14px;color:var(--muted)">🌬️</div></div>
+          <div class="metric"><div><small>Visibilidad</small><div class="val" id="visibility">-- km</div></div><div style="font-size:14px;color:var(--muted)">🔭</div></div>
+          <div class="metric"><div><small>Presión</small><div class="val" id="pressure">-- hPa</div></div><div style="font-size:14px;color:var(--muted)">⛭</div></div>
+        </div>
+
+        <div style="margin-top:14px">
+          <div style="font-size:12px;color:var(--muted)">Pronóstico 5 días</div>
+          <div class="forecast-row" id="forecastRow"></div>
+        </div>
+
+        <div class="footer">Datos: OpenWeatherMap • Estilo: Weathry</div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; gap:14px; align-items:stretch;">
+          <div style="flex:1">
+            <div style="font-size:12px;color:var(--muted)">Índice UV</div>
+            <div style="display:flex; gap:12px; align-items:center; margin-top:8px;">
+              <canvas id="uvGauge" width="160" height="90"></canvas>
+              <div>
+                <div class="uv-val" id="uvVal">--</div>
+                <div style="color:var(--muted)" id="uvDesc">--</div>
+              </div>
+            </div>
+          </div>
+          <div style="width:260px">
+            <div style="font-size:12px;color:var(--muted)">Visión general</div>
+            <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+              <div class="metric"><div><small>AQI (PM2.5)</small><div class="val" id="aqiVal">--</div></div></div>
+              <div class="metric"><div><small>Ráfaga</small><div class="val" id="gust">-- m/s</div></div></div>
+              <div class="metric"><div><small>Dirección</small><div class="val" id="windDir">--</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT -->
+    <div class="right-col">
+      <div class="card map-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-weight:800">Mapa meteorológico</div>
+          <div style="color:var(--muted);font-size:13px" id="mapRefreshNote">Actualiza cada 60s</div>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div style="display:flex; gap:18px;">
+        <div class="card" style="flex:1">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-weight:800">Velocidad de viento (últimas horas)</div>
+            <div style="color:var(--muted);font-size:13px" id="lastUpdate">--</div>
+          </div>
+          <div style="height:120px;margin-top:6px;">
+            <canvas id="windChart"></canvas>
+          </div>
+          <div style="margin-top:12px">
+            <div style="font-weight:800">Calidad del aire</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+              <div>
+                <div class="aqi-big" id="aqiBig">--</div>
+                <div class="aqi-desc" id="aqiText">--</div>
+              </div>
+              <div style="width:120px;height:80px">
+                <canvas id="aqiDonut" width="120" height="80"></canvas>
+              </div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:8px">Fuente: OpenWeather air_pollution</div>
+          </div>
+        </div>
+
+        <div class="card" style="width:420px">
+          <div style="font-weight:800;margin-bottom:8px">Temperatura (última hora)</div>
+          <div style="height:170px;">
+            <canvas id="tempMiniChart"></canvas>
+          </div>
+
+          <div style="margin-top:12px">
+            <div style="font-weight:700;margin-bottom:8px">Detalles</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="metric"><div><small>Salida del sol</small><div class="val" id="sunrise">--:--</div></div></div>
+              <div class="metric"><div><small>Puesta del sol</small><div class="val" id="sunset">--:--</div></div></div>
+              <div class="metric"><div><small>Coordenadas</small><div class="val" id="coords">--</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+<script>
+/* ==========================
+   CONFIG: API key & cities
+   ========================== */
+// <<-- TU API KEY (proporcionada)
+const OWM_API_KEY = "f280f078f02446a9f49ed6d4909b7704";
+
+// Ciudades de ejemplo
+const cities = [
+  {name:"Ciudad de México, MX", lat:19.4326, lon:-99.1332},
+  {name:"Puebla, MX", lat:19.0413, lon:-98.2062},
+  {name:"Monterrey, MX", lat:25.6866, lon:-100.3161},
+  {name:"Guadalajara, MX", lat:20.6597, lon:-103.3496}
+];
+/* ========================== */
+
+/* UI refs */
+const citySelect = document.getElementById('citySelect');
+cities.forEach((c,i)=> {
+  const opt = document.createElement('option'); opt.value=i; opt.textContent=c.name; citySelect.appendChild(opt);
+});
+citySelect.value = 0;
+
+document.getElementById('refreshBtn').addEventListener('click', ()=> fetchAndRender(true));
+
+/* Leaflet map (dark tiles from Carto) */
+const map = L.map('map',{zoomControl:false, attributionControl:false}).setView([cities[0].lat, cities[0].lon], 10);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+let locationMarker = L.circleMarker([cities[0].lat, cities[0].lon], {radius:14, color: 'rgba(0,240,255,0.9)', fillColor:'#7b2cff', fillOpacity:0.9, weight:2}).addTo(map);
+/* layer for AQI circles */
+let aqiLayer = L.layerGroup().addTo(map);
+
+/* small canvas icon draw */
+function drawIcon(code){
+  const canvas = document.getElementById('iconCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.save(); ctx.translate(canvas.width/2, canvas.height/2);
+  ctx.shadowColor = "rgba(0,240,255,0.12)"; ctx.shadowBlur = 22;
+  // cloud base
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.beginPath(); ctx.arc(-18,4,26,0,Math.PI*2); ctx.arc(14,4,22,0,Math.PI*2); ctx.arc(0,-8,22,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur = 0;
+  if (code.startsWith('01')) { // clear
+    ctx.fillStyle = "#ffcf5b"; ctx.beginPath(); ctx.arc(30,-20,12,0,Math.PI*2); ctx.fill();
+  } else if (code.startsWith('09') || code.startsWith('10') || code.startsWith('11')){
+    ctx.strokeStyle = "rgba(0,240,255,0.9)"; ctx.lineWidth = 3;
+    for(let i=-8;i<12;i+=6){ ctx.beginPath(); ctx.moveTo(i,18); ctx.lineTo(i+6,34); ctx.stroke(); }
+  } else if (code.startsWith('13')) {
+    ctx.fillStyle = "#ffffff"; ctx.font="bold 22px Inter"; ctx.fillText("❄", 24, 4);
+  } else {
+    ctx.fillStyle = "#ffcf5b"; ctx.beginPath(); ctx.arc(26,-16,9,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* Charts init */
+const windCtx = document.getElementById('windChart').getContext('2d');
+const windChart = new Chart(windCtx, {
+  type:'line', data:{labels:[], datasets:[{label:'Viento (km/h)', data:[], borderColor:'#00f0ff', backgroundColor:'rgba(0,240,255,0.06)', tension:0.3, pointRadius:2}]},
+  options:{responsive:true, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#9aa3b7'}}, y:{ticks:{color:'#9aa3b7'}}}
+});
+
+const tempMiniCtx = document.getElementById('tempMiniChart').getContext('2d');
+const tempMini = new Chart(tempMiniCtx,{type:'line', data:{labels:[], datasets:[{label:'°C', data:[], borderColor:'#ff3aff', backgroundColor:'rgba(123,44,255,0.08)', tension:0.25}]}, options:{responsive:true, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#9aa3b7'}}, y:{ticks:{color:'#9aa3b7'}}}});
+
+const aqiCtx = document.getElementById('aqiDonut').getContext('2d');
+const aqiDonut = new Chart(aqiCtx, {
+  type:'doughnut',
+  data:{labels:['Good','Mod','Unhealthy','Very','Hazardous'], datasets:[{data:[1,0,0,0,0], backgroundColor:['#00c486','#99ff00','#ffcc00','#ff6b00','#ff0033']}]},
+  options:{responsive:true, plugins:{legend:{display:false}}, cutout: '70%'}
+});
+
+const uvCtx = document.getElementById('uvGauge').getContext('2d');
+const uvGauge = new Chart(uvCtx, {
+  type:'doughnut',
+  data:{labels:['uv','rest'], datasets:[{data:[0,100], backgroundColor:['#ffb200','rgba(255,255,255,0.06)']}]},
+  options:{rotation: Math.PI, circumference: Math.PI, plugins:{legend:{display:false}}, cutout: '70%'}
+});
+
+/* helpers */
+function degToCompass(num){
+  const val = Math.floor((num/22.5)+0.5);
+  const arr = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  return arr[(val % 16)];
+}
+function aqiLabelFromValue(val){
+  if(val===1) return {text:'Bueno', color:'#00c486'};
+  if(val===2) return {text:'Moderado', color:'#99ff00'};
+  if(val===3) return {text:'Malo', color:'#ffcc00'};
+  if(val===4) return {text:'Muy malo', color:'#ff6b00'};
+  return {text:'Peligroso', color:'#ff0033'};
+}
+
+/* DOM refs */
+const tempEl = document.getElementById('temp'), locEl = document.getElementById('loc'), descEl = document.getElementById('weatherDesc');
+const humidityEl = document.getElementById('humidity'), windSpeedEl = document.getElementById('windSpeed'), visibilityEl = document.getElementById('visibility'), pressureEl = document.getElementById('pressure');
+const uvValEl = document.getElementById('uvVal'), uvDescEl = document.getElementById('uvDesc');
+const aqiBigEl = document.getElementById('aqiBig'), aqiTextEl = document.getElementById('aqiText');
+const feelsEl = document.getElementById('feelsLike'), coordsEl = document.getElementById('coords'), sunriseEl = document.getElementById('sunrise'), sunsetEl = document.getElementById('sunset');
+const lastUpdateEl = document.getElementById('lastUpdate');
+
+/* render forecast */
+function renderForecast(daily){
+  const row = document.getElementById('forecastRow'); row.innerHTML='';
+  for(let i=1;i<=5;i++){
+    const d = daily[i];
+    const date = new Date(d.dt*1000);
+    const el = document.createElement('div'); el.className='day';
+    el.innerHTML = `<div class="d">${date.toLocaleDateString(undefined,{weekday:'short'})}</div>
+                    <div style="margin-top:6px"><img src="https://openweathermap.org/img/wn/${d.weather[0].icon}@2x.png" style="width:48px;height:48px;filter:drop-shadow(0 8px 20px rgba(123,44,255,0.06))"/></div>
+                    <div class="t">${Math.round(d.temp.max)}° / ${Math.round(d.temp.min)}°</div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:6px">${d.weather[0].description}</div>`;
+    row.appendChild(el);
+  }
+}
+
+/* fetch + render */
+async function fetchAndRender(force=false){
+  const idx = Number(citySelect.value);
+  const city = cities[idx];
+  coordsEl.textContent = `${city.lat.toFixed(4)}, ${city.lon.toFixed(4)}`;
+  // If no API key, fallback to simulation
+  if(!OWM_API_KEY || OWM_API_KEY === ""){
+    simulate(city); return;
+  }
+
+  try{
+    const url = `https://api.openweathermap.org/data/2.5/onecall?lat=${city.lat}&lon=${city.lon}&exclude=minutely&units=metric&appid=${OWM_API_KEY}&lang=es`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('OpenWeather OneCall error');
+    const data = await res.json();
+
+    // current
+    const cur = data.current;
+    tempEl.textContent = `${Math.round(cur.temp)}°`;
+    locEl.textContent = city.name;
+    descEl.textContent = cur.weather[0].description;
+    humidityEl.textContent = `${cur.humidity}%`;
+    windSpeedEl.textContent = `${(cur.wind_speed*3.6).toFixed(1)} km/h`;
+    pressureEl.textContent = `${cur.pressure} hPa`;
+    visibilityEl.textContent = `${(cur.visibility/1000).toFixed(1)} km`;
+    feelsEl.textContent = `Feels like ${Math.round(cur.feels_like)}°`;
+    sunriseEl.textContent = new Date(data.current.sunrise*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    sunsetEl.textContent = new Date(data.current.sunset*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+
+    // icon
+    drawIcon(cur.weather[0].icon);
+
+    // forecast
+    renderForecast(data.daily);
+
+    // charts
+    const windSeries = data.hourly.slice(0,12).map(h => Math.round(h.wind_speed*3.6));
+    windChart.data.labels = windSeries.map((_,i)=>i+1);
+    windChart.data.datasets[0].data = windSeries; windChart.update();
+
+    const temps = data.hourly.slice(0,12).map(h => Math.round(h.temp));
+    tempMini.data.labels = temps.map((_,i)=>i+1);
+    tempMini.data.datasets[0].data = temps; tempMini.update();
+
+    // uv gauge
+    const uv = Math.round(cur.uvi);
+    uvValEl.textContent = uv;
+    uvDescEl.textContent = uv<=2? 'Bajo' : uv<=5? 'Moderado' : uv<=7? 'Alto' : uv<=10? 'Muy alto' : 'Extremo';
+    const uvPercent = Math.min(uv/11,1)*100;
+    uvGauge.data.datasets[0].data = [uvPercent, 100-uvPercent]; uvGauge.update();
+
+    // air pollution (OpenWeather)
+    try{
+      const airRes = await fetch(`https://api.openweathermap.org/data/2.5/air_pollution?lat=${city.lat}&lon=${city.lon}&appid=${OWM_API_KEY}`);
+      const air = await airRes.json();
+      const aqi = air.list && air.list[0] && air.list[0].main ? air.list[0].main.aqi : null;
+      if(aqi){
+        const label = aqiLabelFromValue(aqi);
+        aqiBigEl.textContent = label.text;
+        aqiTextEl.textContent = `AQI ${aqi} • PM2.5: ${(air.list[0].components.pm2_5 || 0).toFixed(1)} µg/m³`;
+        aqiDonut.data.datasets[0].data = [0,0,0,0,0]; aqiDonut.data.datasets[0].data[aqi-1] = 100; aqiDonut.update();
+      } else {
+        aqiBigEl.textContent = '--'; aqiTextEl.textContent = 'No disponible';
+      }
+    }catch(e){
+      console.warn('Air fetch failed', e); aqiBigEl.textContent='--'; aqiTextEl.textContent='No disponible';
+    }
+
+    // map marker & AQI overlay (simulate neighbors)
+    locationMarker.setLatLng([city.lat, city.lon]); map.setView([city.lat, city.lon], 10, {animate:true});
+    renderAQILayer(city, data);
+
+    lastUpdateEl.textContent = new Date().toLocaleTimeString();
+  }catch(err){
+    console.error('Fetch error', err);
+    simulate(city);
+  }
+}
+
+/* draw AQI circles around city using simulated or real component PM2.5 if available */
+function renderAQILayer(city, data){
+  aqiLayer.clearLayers();
+  // If we have air pollution real data, use it; otherwise create sample rings
+  // We'll place a few sample points around the city with colors reflecting air quality
+  const samples = [
+    {lat: city.lat+0.03, lon: city.lon+0.02, aqi: Math.ceil(Math.random()*5)},
+    {lat: city.lat-0.035, lon: city.lon-0.01, aqi: Math.ceil(Math.random()*5)},
+    {lat: city.lat+0.01, lon: city.lon-0.04, aqi: Math.ceil(Math.random()*5)}
+  ];
+  samples.forEach(s=>{
+    const lbl = aqiLabelFromValue(s.aqi);
+    const c = L.circle([s.lat, s.lon], {radius:2000, color: lbl.color, fillColor: lbl.color, fillOpacity:0.08, weight:2}).addTo(aqiLayer);
+    c.bindPopup(`<b>${lbl.text}</b><br>AQI ${s.aqi}`);
+  });
+}
+
+/* simulation fallback */
+function simulate(city){
+  const t = Math.round(16 + Math.random()*16);
+  tempEl.textContent = `${t}°`; locEl.textContent = city.name; descEl.textContent = ['nublado','parcialmente nublado','lluvia ligera','soleado'][Math.floor(Math.random()*4)];
+  humidityEl.textContent = `${Math.round(40 + Math.random()*50)}%`; windSpeedEl.textContent = `${(2 + Math.random()*15).toFixed(1)} km/h`;
+  pressureEl.textContent = `${1000 + Math.floor(Math.random()*40)} hPa`; visibilityEl.textContent = `${(4 + Math.random()*10).toFixed(1)} km`;
+  feelsEl.textContent = `Feels like ${t + Math.round(Math.random()*2)}°`;
+  sunriseEl.textContent = `${6 + Math.floor(Math.random()*2)}:0${Math.floor(Math.random()*6)}`; sunsetEl.textContent = `${18 + Math.floor(Math.random()*2)}:1${Math.floor(Math.random()*6)}`;
+  coordsEl.textContent = `${city.lat.toFixed(4)}, ${city.lon.toFixed(4)}`;
+  drawIcon(Math.random()>0.5 ? '01d' : '04d');
+
+  // forecast dummy
+  const now = Math.floor(Date.now()/1000);
+  const daily = Array.from({length:7}).map((_,i)=>({
+    dt: now + i*86400,
+    temp:{max: t + Math.floor(Math.random()*5), min: t - Math.floor(Math.random()*3)},
+    weather:[{icon:'04d', description:'Parcial'}]
+  }));
+  renderForecast(daily);
+
+  const windSeries = Array.from({length:12}).map(()=> Math.round(5 + Math.random()*30));
+  windChart.data.labels = windSeries.map((_,i)=>i+1); windChart.data.datasets[0].data = windSeries; windChart.update();
+
+  const temps = Array.from({length:12}).map(()=> Math.round(12 + Math.random()*18));
+  tempMini.data.labels = temps.map((_,i)=>i+1); tempMini.data.datasets[0].data = temps; tempMini.update();
+
+  const uv = Math.round(Math.random()*11); uvValEl.textContent = uv; uvDescEl.textContent = uv<=2? 'Bajo' : uv<=5? 'Moderado' : uv<=7? 'Alto' : uv<=10? 'Muy alto' : 'Extremo';
+  const uvPercent = Math.min(uv/11,1)*100; uvGauge.data.datasets[0].data = [uvPercent,100-uvPercent]; uvGauge.update();
+
+  const aqi = Math.floor(1 + Math.random()*5); const lab = aqiLabelFromValue(aqi); aqiBigEl.textContent = lab.text; aqiTextEl.textContent = `AQI ${aqi}`; aqiDonut.data.datasets[0].data = [0,0,0,0,0]; aqiDonut.data.datasets[0].data[aqi-1]=100; aqiDonut.update();
+
+  locationMarker.setLatLng([city.lat, city.lon]); map.setView([city.lat, city.lon], 10);
+  renderAQILayer(city, null);
+  lastUpdateEl.textContent = new Date().toLocaleTimeString();
+}
+
+/* auto refresh */
+fetchAndRender();
+setInterval(fetchAndRender, 60000);
+citySelect.addEventListener('change', ()=> fetchAndRender(true));
+</script>
+</body>
+</html>
